@@ -966,3 +966,107 @@ automated tests
 ```
 
 **Phase 1 gate: Design complete — ready to begin Phase 2.**
+
+---
+
+## 31. Implementation Status (Phases 2–5)
+
+### Phase 2 — Core billing logic (`[x]` complete)
+
+```text
+[x] Idempotent usage recording (unique constraint + IntegrityError handling)
+[x] Duplicate request protection (concurrent-safe, tested with real threads)
+[x] Correct quota enforcement (just below / exactly at / just above limit)
+[x] Correct HTTP status codes (429 quota, 402 payment, 422 validation, 404 tenant)
+[x] Input validation (usage_type, quantity, token categories, idempotency key)
+[x] Tenant isolation (X-Tenant-ID header; every query scoped by tenant)
+[x] Usage endpoint (GET /usage with monthly rollup + cost)
+[x] Billable endpoint (POST /generate; api_calls and ai_tokens modes)
+[x] Tests (metering, quota boundaries, isolation, validation)
+```
+
+Implementation notes and deviations from the Phase 1 design:
+
+- Usage types are stored lowercase as `api_calls` and `ai_tokens` (the design
+  used `API_CALL` / `AI_TOKENS`); constants live in `app/constants.py`.
+- The billable request body carries either `quantity` (api_calls) or a token
+  breakdown (ai_tokens), matching the Phase 1 example request.
+- `record_usage` performs the INSERT first and relies on the database unique
+  constraint `UNIQUE(tenant_id, idempotency_key)`; a lost race rolls back and
+  returns the winner's row. No SELECT-then-INSERT.
+
+### Phase 3 — Stripe integration (`[x]` complete)
+
+```text
+[x] Checkout session creation        (POST /billing/checkout)
+[x] Subscription creation            (Stripe Checkout, test mode)
+[x] Stripe webhook endpoint          (POST /webhooks/stripe)
+[x] Signature verification           (stripe.Webhook.construct_event)
+[x] Webhook deduplication            (stripe_webhook_events.event_id UNIQUE)
+[x] Tenant plan synchronization      (only via verified events)
+[x] Handled events                   checkout.session.completed,
+                                     customer.subscription.updated,
+                                     customer.subscription.deleted
+```
+
+Security notes:
+
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID` are read
+  from the environment; `.env` is git-ignored; `.env.example` has placeholders.
+- Invalid signatures return `400` and change no state.
+- Stripe-specific code is isolated in `app/services/stripe_service.py`
+  (API client + signature verification) and `app/services/webhook_sync.py`
+  (event application), keeping core business logic Stripe-free.
+
+### Phase 4 — Cost calculation (`[x]` complete)
+
+```text
+[x] Integer money units              micro-dollars (1e-6 USD), never float
+[x] input / cached_input / output / reasoning token pricing
+[x] Cached input cheaper than input
+[x] Reasoning tokens billed as output
+[x] Centralized pricing constants    app/services/cost.py
+[x] Pinned pricing tests             tests/test_cost.py
+[x] Usage rollup with cost           GET /usage -> cost_micros / cost_cents
+```
+
+Pricing table (micro-dollars per token == USD per 1M tokens):
+
+| category | µ$/token | USD/1M |
+|---|---:|---:|
+| input | 3 | $3.00 |
+| cached input | 1 | $1.00 |
+| output | 15 | $15.00 |
+| reasoning | 15 | $15.00 |
+
+### Phase 5 — Background job, demo & docs (`[x]` complete)
+
+```text
+[x] Background job: monthly usage aggregation (app/jobs/rollup.py)
+    - retry-safe upsert, duplicate-safe via UNIQUE(tenant, type, period)
+    - runs periodically in-process + via `python -m app.jobs.rollup`
+[x] README.md, EVIDENCE.md, BUILDLOG.md, capstone.yaml, .env.example
+[x] Architecture diagram (ASCII, see README)
+[x] Full test suite + acceptance probes
+```
+
+### Data model additions beyond Phase 1
+
+```text
+subscriptions      + stripe_customer_id, stripe_subscription_id, updated_at
+usage_events       + payload (JSON token breakdown + stored cost)
+stripe_webhook_events   new table (processed event dedup)
+usage_snapshots         new table (background rollup output)
+```
+
+### Documented HTTP status semantics
+
+| Code | Meaning |
+|---|---|
+| 200 | Success (including idempotent replays) |
+| 400 | Invalid Stripe signature / malformed webhook |
+| 404 | Unknown tenant |
+| 422 | Validation error (usage type, quantity, tokens, tenant header) |
+| 429 | Usage quota exceeded |
+| 402 | No active subscription / payment required |
+| 503 | Stripe Checkout unavailable (no key configured) |

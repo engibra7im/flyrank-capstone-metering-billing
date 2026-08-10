@@ -1,0 +1,39 @@
+# Usage Metering & Billing Engine - capstone manifest
+# The evaluator can run these commands to bring up and probe the project.
+
+name: Usage Metering & Billing Engine
+version: 2.0.0
+
+run: uvicorn app.main:app --host 0.0.0.0 --port 8000
+seed: python -m app.seed
+test: pytest -q
+
+base_url: http://localhost:8000
+
+# Optional, if a virtual environment is used:
+# setup: python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+
+endpoints:
+  health:            GET  /
+  billable:          POST /generate
+  usage:             GET  /usage
+  checkout:          POST /billing/checkout
+  stripe_webhook:    POST /webhooks/stripe
+
+examples:
+  generate_api_call: >
+    curl -X POST http://localhost:8000/generate \
+      -H "Content-Type: application/json" \
+      -H "Idempotency-Key: demo-1" \
+      -H "X-Tenant-ID: 1" \
+      -d '{"usage_type":"api_calls","quantity":5}'
+
+  generate_ai_tokens: >
+    curl -X POST http://localhost:8000/generate \
+      -H "Content-Type: application/json" \
+      -H "Idempotency-Key: demo-2" \
+      -H "X-Tenant-ID: 1" \
+      -d '{"usage_type":"ai_tokens","input_tokens":1000,"cached_input_tokens":200,"output_tokens":500,"reasoning_tokens":100}'
+
+  usage: >
+    curl http://localhost:8000/usage -H "X-Tenant-ID: 1"
