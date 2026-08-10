@@ -1,0 +1,6 @@
+fastapi
+unicorn
+sqlalchemy
+pydantic-settings
+pytest
+httpx
