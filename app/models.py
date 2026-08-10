@@ -29,7 +29,7 @@ class Subscription(Base):
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.id"), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
     start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.now(timezone.utc))
-    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.now(timezone.utc))
 
 class UsageEvent(Base):
