@@ -1,11 +1,12 @@
 class QuotaExceededError(Exception):
-    def __init__(self, usage_type: str, used: int, limit: int):
-        self.usage_type = usage_type
+    def __init__(self, used: int, requested: int, limit: int):
         self.used = used
+        self.requested = requested
         self.limit = limit
 
         super().__init__(
-            f"{usage_type} quota exceeded: {used}/{limit}"
+            f"Quota exceeded: used={used}, "
+            f"requested={requested}, limit={limit}"
         )
 
 
@@ -14,11 +15,10 @@ def check_quota(
     requested_quantity: int,
     limit: int,
     usage_type: str,
-) -> None:
-
+):
     if current_usage + requested_quantity > limit:
         raise QuotaExceededError(
-            usage_type=usage_type,
             used=current_usage,
+            requested=requested_quantity,
             limit=limit,
         )

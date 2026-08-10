@@ -1,6 +1,8 @@
 fastapi
-unicorn
+uvicorn
 sqlalchemy
 pydantic-settings
+stripe
+python-dotenv
 pytest
 httpx
